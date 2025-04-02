@@ -1,92 +1,192 @@
 library(shiny)
 
-# 定义评分映射表
+# Define the score mapping table
 score_mapping <- list(
-  "分化" = c("高分化" = 5.5, "中分化" = 3.5, "低未分化" = 0),
-  "浸润深度" = c("T2" = 6.5, "T3" = 4, "T4" = -2.5),
-  "淋巴结数目" = c("N0" = 5.5, "N1" = 3, "N2" = 0, "N3" = -5),
-  "临床分期" = c("cTNM I/II期" = 3.5, "cTNM III/IV期" = 0),
-  "CEA" = c("正常" = 1, "升高" = 0),
-  "Her-2评分" = c("Her-2（+++" = 14.5, "Her-2（-~++）" = 0),
-  "Ki67数值" = c("Ki67(＜10%)" = 0, "Ki67(≥10%)" = -2.5),
-  "Lauren分型" = c("肠型" = 2.5, "弥漫型" = 1, "混合型" = 0)
+  "Grade" = c("Well-differentiated" = 5.5, "Moderately-differentiated" = 3.5, "Poorly differentiated and Undifferentiated" = 0),
+  "Depth of invasion" = c("T2" = 6.5, "T3" = 4, "T4" = -2.5),
+  "Lymph node metastasis" = c("N0" = 5.5, "N1" = 3, "N2" = 0, "N3" = -5),
+  "Clinical stage" = c("Stages I-II" = 3.5, "Stages III" = 0),
+  "CEA" = c("Normal" = 1, "Elevated" = 0),
+  "HER-2 status" = c("HER-2（+++）" = 14.5, "HER-2（-~++）" = 0),
+  "Ki67 status" = c("Ki67(<10%)" = 0, "Ki67(>=10%)" = -2.5),
+  "Lauren classification" = c("Intestinal type" = 2.5, "Diffuse type" = 1, "Mixed type" = 0),
+  "Tumor location" = c("Upper" = 5.5, "Lower" = -1.5, "Other regions" = 0)
 )
 
-# 定义UI界面
+# Define the UI interface
 ui <- fluidPage(
-  titlePanel("风险评分计算器"),
+  titlePanel("Risk Calculator for Neoadjuvant Chemotherapy Resistance in Advanced Gastric Cancer"),
   sidebarLayout(
     sidebarPanel(
-      # 创建评分选择
-      selectInput("分化", "分化", choices = c("选择...", "高分化", "中分化", "低未分化")),
-      selectInput("浸润深度", "浸润深度", choices = c("选择...", "T2", "T3", "T4")),
-      selectInput("淋巴结数目", "淋巴结数目", choices = c("选择...", "N0", "N1", "N2", "N3")),
-      selectInput("临床分期", "临床分期", choices = c("选择...", "cTNM I/II期", "cTNM III/IV期")),
-      selectInput("CEA", "CEA", choices = c("选择...", "正常", "升高")),
-      selectInput("Her_2评分", "Her-2评分", choices = c("选择...", "Her-2（+++）", "Her-2（-~++）")),
-      selectInput("Ki67数值", "Ki67数值", choices = c("选择...", "Ki67(＜10%)", "Ki67(≥10%)")),
-      selectInput("Lauren分型", "Lauren分型",  choices = c("选择...", "肠型", "弥漫型", "混合型")),
+      # Create score selection
+      selectInput("Grade", "Grade", choices = c("Choose...", "Well-differentiated", "Moderately-differentiated", "Poorly differentiated and Undifferentiated")),
+      selectInput("Depth_of_invasion", "Depth of invasion", choices = c("Choose...", "T2", "T3", "T4")),
+      selectInput("Lymph_node_metastasis", "Lymph node metastasis", choices = c("Choose...", "N0", "N1", "N2", "N3")),
+      selectInput("Clinical_stage", "Clinical stage", choices = c("Choose...", "Stages I-II", "Stages III")),
+      selectInput("CEA", "CEA", choices = c("Choose...", "Normal", "Elevated"), selected = "Choose..."),
+      selectInput("HER_2_status", "HER-2 status", choices = c("Choose...", "HER-2（+++）", "HER-2（-~++）")),
+      selectInput("Ki67_status", "Ki67 status", choices = c("Choose...", "Ki67(<10%)", "Ki67(>=10%)")),
+      selectInput("Lauren_classification", "Lauren classification",  choices = c("Choose...", "Intestinal type", "Diffuse type", "Mixed type")),
+      selectInput("Tumor_location", "Tumor location", choices = c("Choose...", "Upper", "Lower", "Other regions")),
       br(),
-      actionButton("clear_scores", "清空评分")
+      actionButton("calculate_score", "Calculate the risk level"),
+      actionButton("clear_scores", "One-click option to clear all")
     ),
     mainPanel(
-      h3("总分和风险级别"),
-      verbatimTextOutput("total_score"),
-      verbatimTextOutput("risk_level")
+      h3("Risk Level"),
+      verbatimTextOutput("risk_level"),
+      textOutput("risk_note")
     )
   )
 )
 
-
-
-
-
-
 server <- function(input, output, session) {
-  # 计算总分和风险级别
-  total_score <- reactive({
-    # 检查用户选择是否有效
-    if (any(sapply(input, is.null))) {
-      return(NULL)  # 如果有未选择的项，直接返回 NULL
-    }
-    
-    # 获取用户选择的分数
+  # Store the scores selected by the user
+  user_scores <- reactiveValues(
+    Grade = NULL, Depth_of_invasion = NULL, Lymph_node_metastasis = NULL, Clinical_stage = NULL,
+    CEA = NULL, HER_2_status = NULL, Ki67_status = NULL, Lauren_classification = NULL,
+    Tumor_location = NULL
+  )
+  
+  # Calculate the total score and risk level
+  calculate_score <- function() {
     scores <- c(
-      score_mapping[["分化"]][[input$分化]],
-      score_mapping[["浸润深度"]][[input$浸润深度]],
-      score_mapping[["淋巴结数目"]][[input$淋巴结数目]],
-      score_mapping[["临床分期"]][[input$临床分期]],
-      score_mapping[["CEA"]][[input$CEA]],
-      score_mapping[["Her-2评分"]][[input$Her_2评分]],
-      score_mapping[["Ki67数值"]][[input$Ki67数值]],
-      score_mapping[["Lauren分型"]][[input$Lauren分型]]
+      score_mapping[["Grade"]][ifelse(is.null(user_scores$Grade), NA, user_scores$Grade)],
+      score_mapping[["Depth of invasion"]][ifelse(is.null(user_scores$Depth_of_invasion), NA, user_scores$Depth_of_invasion)],
+      score_mapping[["Lymph node metastasis"]][ifelse(is.null(user_scores$Lymph_node_metastasis), NA, user_scores$Lymph_node_metastasis)],
+      score_mapping[["Clinical stage"]][ifelse(is.null(user_scores$Clinical_stage), NA, user_scores$Clinical_stage)],
+      score_mapping[["CEA"]][ifelse(is.null(user_scores$CEA) || user_scores$CEA == "Choose...", NA, user_scores$CEA)],
+      score_mapping[["HER-2 status"]][ifelse(is.null(user_scores$HER_2_status), NA, user_scores$HER_2_status)],
+      score_mapping[["Ki67 status"]][ifelse(is.null(user_scores$Ki67_status), NA, user_scores$Ki67_status)],
+      score_mapping[["Lauren classification"]][ifelse(is.null(user_scores$Lauren_classification), NA, user_scores$Lauren_classification)],
+      score_mapping[["Tumor location"]][ifelse(is.null(user_scores$Tumor_location), NA, user_scores$Tumor_location)]
     )
-    total <- sum(scores)
+    total <- sum(scores, na.rm = TRUE)
     
-    # 判断风险级别
-    risk_level <- ifelse(total < 3.0, "极高风险",
-                         ifelse(total <= 6.5, "高风险",
-                                ifelse(total <= 9.5, "中风险", "低风险")))
-    
-    list(total_score = total, risk_level = risk_level)
+    if (is.null(user_scores$Grade) || is.null(user_scores$Depth_of_invasion) ||
+        is.null(user_scores$Lymph_node_metastasis) || is.null(user_scores$Clinical_stage) ||
+        is.null(user_scores$CEA) || user_scores$CEA == "Choose..." ||
+        is.null(user_scores$HER_2_status) || is.null(user_scores$Ki67_status) ||
+        is.null(user_scores$Lauren_classification) || is.null(user_scores$Tumor_location)) {
+      return(list(risk_level = NA, risk_note = "You haven't entered all the options. Please fill in all of them"))
+    } else {
+      # Judge the risk level
+      if (total >= 9.5) {
+        return(list(risk_level = "low risk", risk_note = ""))
+      } else if (total >= 6.5) {
+        return(list(risk_level = "intermediate risk", risk_note = ""))
+      } else if (total >= 3) {
+        return(list(risk_level = "high risk", risk_note = ""))
+      } else {
+        return(list(risk_level = "very high risk", risk_note = ""))
+      }
+    }
+  }
+  
+  observeEvent(input$calculate_score, {
+    result <- calculate_score()
+    output$risk_level <- renderPrint({
+      if (!is.na(result$risk_level)) {
+        result$risk_level
+      }
+    })
+    output$risk_note <- renderText({
+      if (!is.na(result$risk_note)) {
+        result$risk_note
+      }
+    })
   })
   
-  # 显示总分和风险级别
-  output$total_score <- renderPrint({
-    total <- total_score()
-    if (!is.null(total)) {
-      total$total_score
+  # Update the scores selected by the user
+  observeEvent(input$Grade, {
+    if (input$Grade == "Choose...") {
+      user_scores$Grade <- NULL
     } else {
-      "请完成所有选项"
+      user_scores$Grade <- input$Grade
     }
   })
-  output$risk_level <- renderPrint({
-    total <- total_score()
-    if (!is.null(total)) {
-      total$risk_level
+  observeEvent(input$Depth_of_invasion, {
+    if (input$Depth_of_invasion == "Choose...") {
+      user_scores$Depth_of_invasion <- NULL
     } else {
-      ""
+      user_scores$Depth_of_invasion <- input$Depth_of_invasion
     }
+  })
+  observeEvent(input$Lymph_node_metastasis, {
+    if (input$Lymph_node_metastasis == "Choose...") {
+      user_scores$Lymph_node_metastasis <- NULL
+    } else {
+      user_scores$Lymph_node_metastasis <- input$Lymph_node_metastasis
+    }
+  })
+  observeEvent(input$Clinical_stage, {
+    if (input$Clinical_stage == "Choose...") {
+      user_scores$Clinical_stage <- NULL
+    } else {
+      user_scores$Clinical_stage <- input$Clinical_stage
+    }
+  })
+  observeEvent(input$CEA, {
+    if (input$CEA == "Choose...") {
+      user_scores$CEA <- NULL
+    } else {
+      user_scores$CEA <- input$CEA
+    }
+  })
+  observeEvent(input$HER_2_status, {
+    if (input$HER_2_status == "Choose...") {
+      user_scores$HER_2_status <- NULL
+    } else {
+      user_scores$HER_2_status <- input$HER_2_status
+    }
+  })
+  observeEvent(input$Ki67_status, {
+    if (input$Ki67_status == "Choose...") {
+      user_scores$Ki67_status <- NULL
+    } else {
+      user_scores$Ki67_status <- input$Ki67_status
+    }
+  })
+  observeEvent(input$Lauren_classification, {
+    if (input$Lauren_classification == "Choose...") {
+      user_scores$Lauren_classification <- NULL
+    } else {
+      user_scores$Lauren_classification <- input$Lauren_classification
+    }
+  })
+  observeEvent(input$Tumor_location, {
+    if (input$Tumor_location == "Choose...") {
+      user_scores$Tumor_location <- NULL
+    } else {
+      user_scores$Tumor_location <- input$Tumor_location
+    }
+  })
+  
+  # One-click option to clear all
+  observeEvent(input$clear_scores, {
+    updateSelectInput(session, "Grade", selected = "Choose...")
+    updateSelectInput(session, "Depth_of_invasion", selected = "Choose...")
+    updateSelectInput(session, "Lymph_node_metastasis", selected = "Choose...")
+    updateSelectInput(session, "Clinical_stage", selected = "Choose...")
+    updateSelectInput(session, "CEA", selected = "Choose...")
+    updateSelectInput(session, "HER_2_status", selected = "Choose...")
+    updateSelectInput(session, "Ki67_status", selected = "Choose...")
+    updateSelectInput(session, "Lauren_classification", selected = "Choose...")
+    updateSelectInput(session, "Tumor_location", selected = "Choose...")
+    
+    user_scores$Grade <- NULL
+    user_scores$Depth_of_invasion <- NULL
+    user_scores$Lymph_node_metastasis <- NULL
+    user_scores$Clinical_stage <- NULL
+    user_scores$CEA <- NULL
+    user_scores$HER_2_status <- NULL
+    user_scores$Ki67_status <- NULL
+    user_scores$Lauren_classification <- NULL
+    user_scores$Tumor_location <- NULL
+    
+    output$risk_level <- NULL
+    output$risk_note <- NULL
   })
 }
+
 shinyApp(ui = ui, server = server)
